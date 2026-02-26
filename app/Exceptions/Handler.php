@@ -2,7 +2,11 @@
 
 namespace App\Exceptions;
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -46,5 +50,65 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
+    }
+
+    /**
+     * Render an exception into an HTTP response.
+     */
+    public function render($request, Throwable $e)
+    {
+        // Solo interceptar respuestas JSON para rutas API
+        if ($request->is('api/*') || $request->expectsJson()) {
+
+            // Modelo no encontrado (findOrFail)
+            if ($e instanceof ModelNotFoundException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Recurso no encontrado.',
+                    'data'    => null,
+                ], 404);
+            }
+
+            // Errores de validación (FormRequest)
+            if ($e instanceof ValidationException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error de validación.',
+                    'data'    => null,
+                    'errors'  => $e->errors(),
+                ], 422);
+            }
+
+            // Ruta no encontrada
+            if ($e instanceof NotFoundHttpException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ruta no encontrada.',
+                    'data'    => null,
+                ], 404);
+            }
+
+            // Método HTTP no permitido
+            if ($e instanceof MethodNotAllowedHttpException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Método HTTP no permitido.',
+                    'data'    => null,
+                ], 405);
+            }
+
+            // Error genérico del servidor
+            $message = config('app.debug')
+                ? $e->getMessage()
+                : 'Error interno del servidor.';
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'data'    => null,
+            ], 500);
+        }
+
+        return parent::render($request, $e);
     }
 }
